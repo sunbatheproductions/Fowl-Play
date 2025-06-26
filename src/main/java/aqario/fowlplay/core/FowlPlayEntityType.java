@@ -176,7 +176,7 @@ public final class FowlPlayEntityType {
                 Heightmap.Type.MOTION_BLOCKING,
                 FlyingBirdEntity::canSpawnPasserines
             )
-            .dimensions(EntityDimensions.changing(0.4f, 0.55f))
+            .dimensions(EntityDimensions.changing(0.3f, 0.45f))
     );
 
     private static <T extends Entity> EntityType<T> register(String id, FabricEntityTypeBuilder<T> builder) {

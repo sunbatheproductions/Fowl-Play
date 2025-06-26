@@ -1,10 +1,13 @@
 package aqario.fowlplay.client;
 
+import aqario.fowlplay.client.particle.SmallBubbleParticle;
 import aqario.fowlplay.client.render.entity.*;
 import aqario.fowlplay.client.render.entity.model.*;
 import aqario.fowlplay.common.config.FowlPlayConfig;
 import aqario.fowlplay.core.FowlPlayEntityType;
+import aqario.fowlplay.core.FowlPlayParticleTypes;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.particle.v1.ParticleFactoryRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityModelLayerRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.minecraft.entity.EntityType;
@@ -14,6 +17,7 @@ public class FowlPlayClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         registerEntityRenderers();
+        registerParticleFactories();
     }
 
     public static void registerEntityRenderers() {
@@ -59,5 +63,9 @@ public class FowlPlayClient implements ClientModInitializer {
             EntityModelLayerRegistry.registerModelLayer(CustomBabyChickenEntityModel.MODEL_LAYER, CustomBabyChickenEntityModel::getTexturedModelData);
             EntityRendererRegistry.register(EntityType.CHICKEN, CustomChickenEntityRenderer::new);
         }
+    }
+
+    public static void registerParticleFactories() {
+        ParticleFactoryRegistry.getInstance().register(FowlPlayParticleTypes.SMALL_BUBBLE, SmallBubbleParticle.Factory::new);
     }
 }

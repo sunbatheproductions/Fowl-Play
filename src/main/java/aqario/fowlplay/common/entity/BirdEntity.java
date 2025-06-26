@@ -5,9 +5,9 @@ import aqario.fowlplay.common.entity.ai.control.BirdLookControl;
 import aqario.fowlplay.common.sound.FowlPlaySoundCategory;
 import aqario.fowlplay.common.util.Birds;
 import aqario.fowlplay.core.FowlPlayMemoryModuleType;
+import aqario.fowlplay.core.FowlPlaySoundEvents;
 import net.minecraft.entity.*;
 import net.minecraft.entity.ai.brain.MemoryModuleState;
-import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.control.BodyControl;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -23,7 +23,6 @@ import net.minecraft.registry.tag.FluidTags;
 import net.minecraft.server.network.DebugInfoSender;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvent;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.LocalDifficulty;
 import net.minecraft.world.ServerWorldAccess;
@@ -33,19 +32,22 @@ import org.jetbrains.annotations.Nullable;
 public abstract class BirdEntity extends AnimalEntity {
     private boolean ambient;
     private int eatingTime;
-    public int callChance;
-    public int songChance;
+    protected int idleAnimationChance;
+    protected int callChance;
+    protected int songChance;
 
     protected BirdEntity(EntityType<? extends BirdEntity> entityType, World world) {
         super(entityType, world);
         this.setCanPickUpLoot(true);
         this.lookControl = new BirdLookControl(this, 85);
+        this.idleAnimationChance = this.random.nextInt(this.getIdleAnimationDelay()) - this.getIdleAnimationDelay();
         this.callChance = this.random.nextInt(this.getCallDelay()) - this.getCallDelay();
         this.songChance = this.random.nextInt(this.getSongDelay()) - this.getSongDelay();
     }
 
     public static DefaultAttributeContainer.Builder createBirdAttributes() {
         return MobEntity.createMobAttributes()
+            .add(EntityAttributes.GENERIC_FOLLOW_RANGE, 32)
             .add(EntityAttributes.GENERIC_MAX_HEALTH, 6.0f)
             .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.2f);
     }
@@ -144,9 +146,6 @@ public abstract class BirdEntity extends AnimalEntity {
             if (this.getBrain().isMemoryInState(FowlPlayMemoryModuleType.SEES_FOOD, MemoryModuleState.VALUE_PRESENT)) {
                 this.getBrain().forget(FowlPlayMemoryModuleType.SEES_FOOD);
             }
-            if (this.getBrain().isMemoryInState(MemoryModuleType.NEAREST_VISIBLE_WANTED_ITEM, MemoryModuleState.VALUE_PRESENT)) {
-                this.getBrain().forget(MemoryModuleType.NEAREST_VISIBLE_WANTED_ITEM);
-            }
         }
     }
 
@@ -159,11 +158,6 @@ public abstract class BirdEntity extends AnimalEntity {
 
     private boolean canEat(ItemStack stack) {
         return this.getFood().test(stack)/* && !this.isSleeping()*/;
-    }
-
-    // how far the bird can see in blocks
-    public int getLookDistance() {
-        return 32;
     }
 
     public abstract Ingredient getFood();
@@ -190,7 +184,7 @@ public abstract class BirdEntity extends AnimalEntity {
 
     @Override
     public boolean canTarget(LivingEntity target) {
-        return super.canTarget(target) && this.canAttack(target);
+        return super.canTarget(target) && (this.canAttack(target) || this.canHunt(target));
     }
 
     @Override
@@ -276,6 +270,25 @@ public abstract class BirdEntity extends AnimalEntity {
         this.getWorld().getProfiler().pop();
     }
 
+    @Override
+    public void tick() {
+        if (this.getWorld().isClient()) {
+            this.updateAnimations();
+        }
+        super.tick();
+    }
+
+    protected void updateAnimations() {
+    }
+
+    protected int getIdleAnimationDelay() {
+        return 240;
+    }
+
+    protected void resetIdleAnimationDelay() {
+        this.idleAnimationChance = -(this.getIdleAnimationDelay() + this.random.nextBetween(-200, 200));
+    }
+
     protected boolean canCall() {
         return this.getWorld().isDay() || this.random.nextFloat() < 0.05F;
     }
@@ -285,11 +298,11 @@ public abstract class BirdEntity extends AnimalEntity {
     }
 
     private void resetCallDelay() {
-        this.callChance = -(this.getCallDelay() - 100 + this.random.nextInt(200));
+        this.callChance = -(this.getCallDelay() + this.random.nextBetween(-150, 150));
     }
 
     private void resetSongDelay() {
-        this.songChance = -(this.getSongDelay() - 100 + this.random.nextInt(200));
+        this.songChance = -(this.getSongDelay() + this.random.nextBetween(-150, 150));
     }
 
     public final void playCallSound() {
@@ -303,6 +316,16 @@ public abstract class BirdEntity extends AnimalEntity {
         SoundEvent song = this.getSongSound();
         if (song != null) {
             this.playSound(song, this.getSongVolume(), this.getSoundPitch());
+        }
+    }
+
+    @Override
+    protected void playHurtSound(DamageSource damageSource) {
+        this.resetCallDelay();
+        this.resetSongDelay();
+        SoundEvent hurt = this.getHurtSound(damageSource);
+        if (hurt != null) {
+            this.playSound(hurt, this.getCallVolume(), this.getSoundPitch());
         }
     }
 
@@ -324,19 +347,6 @@ public abstract class BirdEntity extends AnimalEntity {
         return null;
     }
 
-    protected float getCallVolume() {
-        return 1.0F;
-    }
-
-    protected float getSongVolume() {
-        return 1.0F;
-    }
-
-    @Override
-    public SoundEvent getEatSound(ItemStack stack) {
-        return SoundEvents.ENTITY_PARROT_EAT;
-    }
-
     @Nullable
     @Override
     protected SoundEvent getHurtSound(DamageSource source) {
@@ -347,6 +357,19 @@ public abstract class BirdEntity extends AnimalEntity {
     @Override
     protected SoundEvent getDeathSound() {
         return null;
+    }
+
+    @Override
+    public SoundEvent getEatSound(ItemStack stack) {
+        return FowlPlaySoundEvents.ENTITY_BIRD_EAT;
+    }
+
+    protected float getCallVolume() {
+        return 1.0F;
+    }
+
+    protected float getSongVolume() {
+        return 1.0F;
     }
 
     @Override

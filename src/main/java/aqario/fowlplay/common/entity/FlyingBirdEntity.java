@@ -2,6 +2,7 @@ package aqario.fowlplay.common.entity;
 
 import aqario.fowlplay.common.entity.ai.control.BirdMoveControl;
 import aqario.fowlplay.common.entity.ai.pathing.FlightNavigation;
+import aqario.fowlplay.core.FowlPlayMemoryModuleType;
 import aqario.fowlplay.core.tags.FowlPlayBlockTags;
 import aqario.fowlplay.core.tags.FowlPlayEntityTypeTags;
 import net.minecraft.block.BlockState;
@@ -9,6 +10,8 @@ import net.minecraft.block.LeavesBlock;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.MovementType;
 import net.minecraft.entity.SpawnReason;
+import net.minecraft.entity.ai.brain.Brain;
+import net.minecraft.entity.ai.brain.MemoryModuleType;
 import net.minecraft.entity.ai.control.MoveControl;
 import net.minecraft.entity.ai.pathing.EntityNavigation;
 import net.minecraft.entity.ai.pathing.MobNavigation;
@@ -21,6 +24,7 @@ import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.tag.FluidTags;
 import net.minecraft.state.property.Properties;
+import net.minecraft.util.Unit;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
@@ -110,6 +114,12 @@ public abstract class FlyingBirdEntity extends BirdEntity {
     public void readCustomDataFromNbt(NbtCompound nbt) {
         super.readCustomDataFromNbt(nbt);
         this.setFlying(nbt.getBoolean("flying"));
+        if (this.isFlying()) {
+            this.getBrain().remember(FowlPlayMemoryModuleType.IS_FLYING, Unit.INSTANCE);
+        }
+        else {
+            this.getBrain().forget(FowlPlayMemoryModuleType.IS_FLYING);
+        }
     }
 
     public abstract int getFlapFrequency();
@@ -184,6 +194,7 @@ public abstract class FlyingBirdEntity extends BirdEntity {
     public void setNavigation(boolean isFlying) {
         if (isFlying) {
             this.navigation = this.getFlightNavigation();
+//            this.navigation = new SmoothFlyingPathNavigation(this, this.getWorld());
             this.isFlightNavigation = true;
         }
         else {
@@ -194,23 +205,7 @@ public abstract class FlyingBirdEntity extends BirdEntity {
 
     @Override
     public float getPathfindingFavor(BlockPos pos, WorldView world) {
-        float perch = this.getType().isIn(FowlPlayEntityTypeTags.PASSERINES) && world.getBlockState(pos.down()).isIn(FowlPlayBlockTags.PERCHES) ? 1.0F : 0.0F;
-        float withinView = this.isWithinView(pos, 10.0F) ? 100.0F : 0.0F;
-        return perch + withinView;
-    }
-
-    public boolean isWithinView(BlockPos pos, float angle) {
-        Vec3d target = Vec3d.ofCenter(pos);
-        // bird to target
-        Vec3d targetVec = target.subtract(this.getPos());
-        targetVec = targetVec.normalize();
-
-        Vec3d lookVec = this.getRotationVec(1.0F);
-        float dotProduct = (float) lookVec.dotProduct(targetVec);
-
-        // if dot product >= cosine of max angle the angle is within the cone
-        float cosMaxAngle = MathHelper.cos(angle);
-        return dotProduct >= cosMaxAngle;
+        return this.getType().isIn(FowlPlayEntityTypeTags.PASSERINES) && world.getBlockState(pos.down()).isIn(FowlPlayBlockTags.PERCHES) ? 1.0F : 0.0F;
     }
 
     @Override
@@ -247,12 +242,16 @@ public abstract class FlyingBirdEntity extends BirdEntity {
     public void startFlying() {
         this.setFlying(true);
         this.setNavigation(true);
+        this.getBrain().remember(FowlPlayMemoryModuleType.IS_FLYING, Unit.INSTANCE);
     }
 
     public void stopFlying() {
         this.setFlying(false);
         this.setNavigation(false);
         this.getNavigation().stop();
+        Brain<?> brain = this.getBrain();
+        brain.forget(FowlPlayMemoryModuleType.IS_FLYING);
+        brain.forget(MemoryModuleType.WALK_TARGET);
     }
 
     public boolean isFlying() {
